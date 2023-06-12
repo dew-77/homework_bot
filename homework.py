@@ -7,14 +7,6 @@ import sys
 from dotenv import load_dotenv
 from exceptions import StatusCodeError
 
-
-logging.basicConfig(
-    level=logging.DEBUG,
-    filename='main.log',
-    filemode='w',
-    format='%(asctime)s, %(levelname)s, %(message)s'
-)
-
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -48,10 +40,9 @@ homework_statuses = {}
 def check_tokens():
     """Проверка переменных окружения."""
     vars = [TELEGRAM_CHAT_ID, TELEGRAM_TOKEN, PRACTICUM_TOKEN]
-    for var in vars:
-        if not var:
-            return False
-    return True
+    if not all(vars):
+        logger.critical('One of the environment variables is missing')
+        raise ValueError('Missing environment variables')
 
 
 def send_message(bot, message):
@@ -74,12 +65,13 @@ def get_api_answer(timestamp):
             url=ENDPOINT, headers=HEADERS, params={'from_date': timestamp}
         )
         if response.status_code != 200:
-            raise StatusCodeError(
-                f'Status code is different from 200 : {response.status_code}'
-            )
+            message = (f'Status code is different from 200 : '
+                       f'{response.status_code}')
+            logger.error(message)
+            raise StatusCodeError(message)
         return response.json()
-    except requests.RequestException():
-        logging.error('Endpoint not available')
+    except requests.RequestException() as request_error:
+        logging.error(f'Endpoint not available: {request_error}')
         return None
     except Exception as error:
         logging.error(f'Endpoint request error: {error}')
@@ -87,7 +79,7 @@ def get_api_answer(timestamp):
 
 def check_response(response):
     """Проверка ответа API."""
-    if type(response) != dict:
+    if not isinstance(response, dict):
         msg = f'Incorrect type of API response: {type(response)}'
         logging.error(msg)
         raise TypeError(msg)
@@ -97,7 +89,7 @@ def check_response(response):
         msg = f'Keys are missing: {", ".join(missing_keys)}'
         logging.error(msg)
         raise KeyError(msg)
-    if type(response['homeworks']) != list:
+    if not isinstance(response['homeworks'], list):
         msg = f'Incorrect type of homework: {type(response["homeworks"])}'
         logging.error(msg)
         raise TypeError(msg)
@@ -137,11 +129,8 @@ def parse_status(homework):
 
 def main():
     """Основная логика работы бота."""
-    if check_tokens():
-        bot = telegram.Bot(token=TELEGRAM_TOKEN)
-    else:
-        logger.critical('One of the environment variables is missing')
-        raise ValueError('Missing environment variables')
+    check_tokens()
+    bot = telegram.Bot(token=TELEGRAM_TOKEN)
 
     timestamp = int(time.time())
 
@@ -162,4 +151,10 @@ def main():
 
 
 if __name__ == '__main__':
+    logging.basicConfig(
+        level=logging.DEBUG,
+        filename='main.log',
+        filemode='w',
+        format='%(asctime)s, %(levelname)s, %(message)s'
+    )
     main()
